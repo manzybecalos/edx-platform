@@ -4672,3 +4672,6 @@ DEFAULT_EMAIL_LOGO_URL = 'https://edx-cdn.org/v3/default/logo.png'
 ################# Settings for olx validation. #################
 COURSE_OLX_VALIDATION_STAGE = 1
 COURSE_OLX_VALIDATION_IGNORE_LIST = None
+
+################# show account activate cta after register ########################
+EDX_SHOW_ACTIVATE_CTA = 'edx-show-activate-cta'

@@ -741,6 +741,8 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
             enr for enr in course_enrollments if entitlement.enrollment_course_run.course_id != enr.course_id
         ]
 
+    edx_show_activate_cta = request.COOKIES.get(settings.EDX_SHOW_ACTIVATE_CTA, None)
+
     context = {
         'urls': urls,
         'programs_data': programs_data,
@@ -772,6 +774,7 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
         'denied_banner': denied_banner,
         'billing_email': settings.PAYMENT_SUPPORT_EMAIL,
         'user': user,
+        'edx_show_activate_cta': edx_show_activate_cta,
         'logout_url': reverse('logout'),
         'platform_name': platform_name,
         'enrolled_courses_either_paid': enrolled_courses_either_paid,
@@ -826,4 +829,8 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
         'resume_button_urls': resume_button_urls
     })
 
-    return render_to_response('dashboard.html', context)
+    response = render_to_response('dashboard.html', context)
+    if edx_show_activate_cta:
+        response.delete_cookie(settings.EDX_SHOW_ACTIVATE_CTA)
+
+    return response

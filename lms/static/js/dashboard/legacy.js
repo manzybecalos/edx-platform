@@ -224,6 +224,42 @@
              return false;
          });
 
+         $("#send_cta_email").click(function (e) {
+            console.log(urls.sendAccountActivationEmail);
+             $.ajax({
+                 type: 'POST',
+                 url: urls.sendAccountActivationEmail,
+                 data: $(this).serializeArray(),
+                 success: function(data) {
+                     if (data.success) {
+                         location.href = urls.dashboard;
+                     }
+                 },
+                 error: function(xhr) {
+                     if (xhr.status === 500) {
+                         location.href = urls.dashboard;
+                     }
+                 }
+             });
+           e.preventDefault();
+
+           $('#activate-account-modal').css("display" , "none");
+            $("#lean_overlay").css({"display": "none",});
+         });
+
+         $("#activate-account-modal").on('click', '#button', function () {
+           $('#activate-account-modal').css("display" , "none");
+            $("#lean_overlay").css({"display": "none",});
+         });
+
+         const display = $('#activate-account-modal').css('display');
+         if (display === 'block') {
+           $("#lean_overlay").css({
+            "display": "block",
+            "z-index": 0
+           });
+         }
+
          $('.action-email-settings').each(function(index) {
              $(this).attr('id', 'email-settings-' + index);
             // a bit of a hack, but gets the unique selector for the modal trigger

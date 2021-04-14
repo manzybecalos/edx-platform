@@ -536,6 +536,7 @@ class RegistrationView(APIView):
         redirect_url = get_redirect_url_with_host(root_url, redirect_to)
         response = self._create_response(request, {}, status_code=200, redirect_url=redirect_url)
         set_logged_in_cookies(request, response, user)
+        response.set_cookie(settings.EDX_SHOW_ACTIVATE_CTA, True) # setting the cookie for CTA dialogue
         return response
 
     def _handle_duplicate_email_username(self, request, data):
