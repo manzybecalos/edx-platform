@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for tracking middleware."""
 
 
@@ -10,7 +9,7 @@ from django.test import TestCase
 from django.test.client import RequestFactory
 from django.test.utils import override_settings
 from eventtracking import tracker
-from mock import patch, sentinel
+from unittest.mock import patch, sentinel
 
 from common.djangoapps.track.middleware import TrackMiddleware
 
@@ -20,7 +19,7 @@ class TrackMiddlewareTestCase(TestCase):
     """  Class for checking tracking requests """
 
     def setUp(self):
-        super(TrackMiddlewareTestCase, self).setUp()  # lint-amnesty, pylint: disable=super-with-arguments
+        super().setUp()  # lint-amnesty, pylint: disable=super-with-arguments
         self.track_middleware = TrackMiddleware()
         self.request_factory = RequestFactory()
 
@@ -48,7 +47,7 @@ class TrackMiddlewareTestCase(TestCase):
         request.META[meta_key] = 'test latin1 \xd3 \xe9 \xf1'
 
         context = self.get_context_for_request(request)
-        assert context[context_key] == u'test latin1 Ó é ñ'
+        assert context[context_key] == 'test latin1 Ó é ñ'
 
     def test_default_filters_do_not_render_view(self):
         for url in ['/event', '/event/1', '/login', '/heartbeat']:
@@ -138,7 +137,7 @@ class TrackMiddlewareTestCase(TestCase):
 
     def assert_dict_subset(self, superset, subset):
         """Assert that the superset dict contains all of the key-value pairs found in the subset dict."""
-        for key, expected_value in six.iteritems(subset):
+        for key, expected_value in subset.items():
             assert superset[key] == expected_value
 
     def test_request_with_user(self):
