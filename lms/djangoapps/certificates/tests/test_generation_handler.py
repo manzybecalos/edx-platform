@@ -74,25 +74,11 @@ class AllowlistTests(ModuleStoreTestCase):
         """
         assert is_using_certificate_allowlist(self.course_run_key)
 
-    @override_waffle_flag(CERTIFICATES_USE_ALLOWLIST, active=False)
-    def test_is_using_allowlist_false(self):
-        """
-        Test the allowlist flag without the override
-        """
-        assert not is_using_certificate_allowlist(self.course_run_key)
-
     def test_is_using_allowlist_and_is_on_list(self):
         """
         Test the allowlist flag and the presence of the user on the list
         """
         assert is_using_certificate_allowlist_and_is_on_allowlist(self.user, self.course_run_key)
-
-    @override_waffle_flag(CERTIFICATES_USE_ALLOWLIST, active=False)
-    def test_is_using_allowlist_and_is_on_list_with_flag_off(self):
-        """
-        Test the allowlist flag and the presence of the user on the list when the flag is off
-        """
-        assert not is_using_certificate_allowlist_and_is_on_allowlist(self.user, self.course_run_key)
 
     def test_is_using_allowlist_and_is_on_list_true(self):
         """
@@ -146,16 +132,17 @@ class AllowlistTests(ModuleStoreTestCase):
         """
         assert _can_generate_certificate_for_status(None, None)
 
-    @override_waffle_flag(CERTIFICATES_USE_ALLOWLIST, active=False)
     def test_handle_invalid(self):
         """
         Test handling of an invalid user/course run combo
         """
-        assert not _can_generate_allowlist_certificate(self.user, self.course_run_key)
-        assert not generate_allowlist_certificate_task(self.user, self.course_run_key)
-        assert not can_generate_certificate_task(self.user, self.course_run_key)
-        assert not generate_certificate_task(self.user, self.course_run_key)
-        assert _set_allowlist_cert_status(self.user, self.course_run_key) is None
+        u = UserFactory()
+
+        assert not _can_generate_allowlist_certificate(u, self.course_run_key)
+        assert not generate_allowlist_certificate_task(u, self.course_run_key)
+        assert not can_generate_certificate_task(u, self.course_run_key)
+        assert not generate_certificate_task(u, self.course_run_key)
+        assert _set_allowlist_cert_status(u, self.course_run_key) is None
 
     def test_handle_valid(self):
         """

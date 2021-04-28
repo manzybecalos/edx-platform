@@ -871,20 +871,6 @@ class AllowlistTests(ModuleStoreTestCase):
         users = get_allowlisted_users(self.third_course_run_key)
         assert 0 == users.count()
 
-    @override_waffle_flag(CERTIFICATES_USE_ALLOWLIST, active=False)
-    def test_get_users_allowlist_false(self):
-        """
-        Test
-        """
-        users = get_allowlisted_users(self.course_run_key)
-        assert 0 == users.count()
-
-        users = get_allowlisted_users(self.second_course_run_key)
-        assert 0 == users.count()
-
-        users = get_allowlisted_users(self.third_course_run_key)
-        assert 0 == users.count()
-
 
 class CertificateAllowlistTests(ModuleStoreTestCase):
     """
@@ -1024,7 +1010,7 @@ class CertificateAllowlistTests(ModuleStoreTestCase):
 
     def test_can_be_added_to_allowlist_not_enrolled(self):
         """
-        Test to verify that a learner will be rejected from the allowlist without an active enrollmeint in a
+        Test to verify that a learner will be rejected from the allowlist without an active enrollment in a
         course-run.
         """
         new_course_run = CourseFactory()
