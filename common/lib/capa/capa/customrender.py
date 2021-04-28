@@ -24,7 +24,7 @@ registry = TagRegistry()
 # -----------------------------------------------------------------------------
 
 
-class MathRenderer(object):  # lint-amnesty, pylint: disable=missing-class-docstring
+class MathRenderer:  # lint-amnesty, pylint: disable=missing-class-docstring
     tags = ['math']
 
     def __init__(self, system, xml):
@@ -57,7 +57,7 @@ class MathRenderer(object):  # lint-amnesty, pylint: disable=missing-class-docst
         """
         # TODO: why are there nested html tags here??  Why are there html tags at all, in fact?
         # xss-lint: disable=python-interpolate-html
-        html = '<html><html>%s</html><html>%s</html></html>' % (  # lint-amnesty, pylint: disable=redefined-outer-name
+        html = '<html><html>{}</html><html>{}</html></html>'.format(  # lint-amnesty, pylint: disable=redefined-outer-name
             self.mathstr, saxutils.escape(self.xml.tail))
         try:
             xhtml = etree.XML(html)
@@ -83,7 +83,7 @@ registry.register(MathRenderer)
 # -----------------------------------------------------------------------------
 
 
-class SolutionRenderer(object):
+class SolutionRenderer:
     """
     A solution is just a <span>...</span> which is given an ID, that is used for displaying an
     extended answer (a problem "solution") after "show answers" is pressed.
@@ -109,7 +109,7 @@ registry.register(SolutionRenderer)
 # -----------------------------------------------------------------------------
 
 
-class TargetedFeedbackRenderer(object):
+class TargetedFeedbackRenderer:
     """
     A targeted feedback is just a <span>...</span> that is used for displaying an
     extended piece of feedback to students if they incorrectly answered a question.
@@ -154,7 +154,7 @@ registry.register(TargetedFeedbackRenderer)
 # -----------------------------------------------------------------------------
 
 
-class ClarificationRenderer(object):
+class ClarificationRenderer:
     """
     A clarification appears as an inline icon which reveals more information when the user
     hovers over it.
@@ -167,7 +167,7 @@ class ClarificationRenderer(object):
         self.system = system
         # Get any text content found inside this tag prior to the first child tag. It may be a string or None type.
         initial_text = xml.text if xml.text else ''
-        self.inner_html = initial_text + u''.join(etree.tostring(element, encoding='unicode') for element in xml)
+        self.inner_html = initial_text + ''.join(etree.tostring(element, encoding='unicode') for element in xml)
         self.tail = xml.tail
 
     def get_html(self):
