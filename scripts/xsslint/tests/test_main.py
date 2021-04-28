@@ -93,9 +93,9 @@ class TestXSSLinter(TestCase):
         assert re.search(f'test\\.py.*{self.ruleset.python_parse_error.rule_id}', output) is None
         assert re.search(f'test\\.py.*{self.ruleset.python_wrap_html.rule_id}', output) is not None
         # Assert no rule totals.
-        assert re.search('{}:\\s*{} violations'.format(self.ruleset.python_parse_error.rule_id, 0), output) is None
+        assert re.search(f'{self.ruleset.python_parse_error.rule_id}:\\s*{0} violations', output) is None
         # Assert final total
-        assert re.search('{} violations total'.format(5), output) is not None
+        assert re.search(f'{5} violations total', output) is not None
 
     def test_lint_with_verbose(self):
         """
@@ -126,9 +126,9 @@ class TestXSSLinter(TestCase):
         assert lines_with_rule >= 1
         assert lines_without_rule >= 1
         # Assert no rule totals.
-        assert re.search('{}:\\s*{} violations'.format(self.ruleset.python_parse_error.rule_id, 0), output) is None
+        assert re.search(f'{self.ruleset.python_parse_error.rule_id}:\\s*{0} violations', output) is None
         # Assert final total
-        assert re.search('{} violations total'.format(5), output) is not None
+        assert re.search(f'{5} violations total', output) is not None
 
     def test_lint_with_rule_totals(self):
         """
@@ -152,9 +152,9 @@ class TestXSSLinter(TestCase):
         assert re.search(f'test\\.py.*{self.ruleset.python_wrap_html.rule_id}', output) is not None
 
         # Assert totals output.
-        assert re.search('{}:\\s*{} violations'.format(self.ruleset.python_parse_error.rule_id, 0), output) is not None
-        assert re.search('{}:\\s*{} violations'.format(self.ruleset.python_wrap_html.rule_id, 1), output) is not None
-        assert re.search('{} violations total'.format(5), output) is not None
+        assert re.search(f'{self.ruleset.python_parse_error.rule_id}:\\s*{0} violations', output) is not None
+        assert re.search(f'{self.ruleset.python_wrap_html.rule_id}:\\s*{1} violations', output) is not None
+        assert re.search(f'{5} violations total', output) is not None
 
     def test_lint_with_json_output(self):
         """
@@ -211,5 +211,5 @@ class TestXSSLinter(TestCase):
         assert re.search('test\\.py', output) is not None
 
         # Assert no totals.
-        assert re.search('{}:\\s*{} violations'.format(self.ruleset.python_parse_error.rule_id, 0), output) is None
-        assert re.search('{} violations total'.format(7), output) is None
+        assert re.search(f'{self.ruleset.python_parse_error.rule_id}:\\s*{0} violations', output) is None
+        assert re.search(f'{7} violations total', output) is None
