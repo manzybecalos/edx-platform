@@ -287,7 +287,7 @@ class WordCloudBlock(  # pylint: disable=abstract-method
                 'error': 'Unknown Command!'
             })
 
-    # @toggle_mobile_support
+    @XBlock.supports('multi_device')
     def student_view(self, context):  # lint-amnesty, pylint: disable=unused-argument
         """
         Renders the output that a student will see.
