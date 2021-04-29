@@ -545,14 +545,23 @@ class RegistrationView(APIView):
         username = data.get('username')
         errors = {}
 
+        # TODO: remove the is_authn check and use the new error message as default after redesign
+        is_authn = data.get('is_authn', False)
+
         error_code = 'duplicate'
         if email is not None and email_exists_or_retired(email):
             error_code += '-email'
-            errors['email'] = [{'user_message': accounts_settings.EMAIL_CONFLICT_MSG.format(email_address=email)}]
+            error_message = accounts_settings.AUTHN_EMAIL_CONFLICT_MSG if is_authn else (
+                accounts_settings.EMAIL_CONFLICT_MSG.format(email_address=email)
+            )
+            errors['email'] = [{'user_message': error_message}]
 
         if username is not None and username_exists_or_retired(username):
             error_code += '-username'
-            errors['username'] = [{'user_message': accounts_settings.USERNAME_CONFLICT_MSG.format(username=username)}]
+            error_message = accounts_settings.AUTHN_USERNAME_CONFLICT_MSG if is_authn else (
+                accounts_settings.USERNAME_CONFLICT_MSG.format(username=username)
+            )
+            errors['username'] = [{'user_message': error_message}]
             errors['username_suggestions'] = generate_username_suggestions(username)
 
         if errors:
@@ -628,8 +637,70 @@ class RegistrationView(APIView):
             pass  # lint-amnesty, pylint: disable=unnecessary-pass
 
 
+class RegistrationValidations:
+    """
+    Base class for registration validations
+    """
+    # This end-point is available to anonymous users, so no authentication is needed.
+    authentication_classes = []
+    username_suggestions = []
+    api_version = None
+
+    def name_handler(self, request):
+        """ Validates whether fullname is valid """
+        name = request.data.get('name')
+        return get_name_validation_error(name)
+
+    def username_handler(self, request):
+        """ Validates whether the username is valid. """
+        username = request.data.get('username')
+        invalid_username_error = get_username_validation_error(username)
+        username_exists_error = get_username_existence_validation_error(username, self.api_version)
+        if username_exists_error:
+            self.username_suggestions = generate_username_suggestions(username)
+        # We prefer seeing for invalidity first.
+        # Some invalid usernames (like for superusers) may exist.
+        return invalid_username_error or username_exists_error
+
+    def email_handler(self, request):
+        """ Validates whether the email address is valid. """
+        email = request.data.get('email')
+        invalid_email_error = get_email_validation_error(email, self.api_version)
+        email_exists_error = get_email_existence_validation_error(email, self.api_version)
+        # We prefer seeing for invalidity first.
+        # Some invalid emails (like a blank one for superusers) may exist.
+        return invalid_email_error or email_exists_error
+
+    def confirm_email_handler(self, request):
+        """ Confirm email validator """
+        email = request.data.get('email')
+        confirm_email = request.data.get('confirm_email')
+        return get_confirm_email_validation_error(confirm_email, email)
+
+    def password_handler(self, request):
+        """ Password validator """
+        username = request.data.get('username')
+        email = request.data.get('email')
+        password = request.data.get('password')
+        return get_password_validation_error(password, username, email)
+
+    def country_handler(self, request):
+        """ Country validator """
+        country = request.data.get('country')
+        return get_country_validation_error(country)
+
+    validation_handlers = {
+        "name": name_handler,
+        "username": username_handler,
+        "email": email_handler,
+        "confirm_email": confirm_email_handler,
+        "password": password_handler,
+        "country": country_handler
+    }
+
+
 # pylint: disable=line-too-long
-class RegistrationValidationView(APIView):
+class RegistrationValidationView(RegistrationValidations, APIView):
     """
         **Use Cases**
 
@@ -715,57 +786,7 @@ class RegistrationValidationView(APIView):
                 A handler to check whether the validity of country fields.
     """
 
-    # This end-point is available to anonymous users, so no authentication is needed.
-    authentication_classes = []
-    username_suggestions = []
-
-    def name_handler(self, request):
-        name = request.data.get('name')
-        return get_name_validation_error(name)
-
-    def username_handler(self, request):
-        """ Validates whether the username is valid. """
-        username = request.data.get('username')
-        invalid_username_error = get_username_validation_error(username)
-        username_exists_error = get_username_existence_validation_error(username)
-        if username_exists_error:
-            self.username_suggestions = generate_username_suggestions(username)
-        # We prefer seeing for invalidity first.
-        # Some invalid usernames (like for superusers) may exist.
-        return invalid_username_error or username_exists_error
-
-    def email_handler(self, request):
-        """ Validates whether the email address is valid. """
-        email = request.data.get('email')
-        invalid_email_error = get_email_validation_error(email)
-        email_exists_error = get_email_existence_validation_error(email)
-        # We prefer seeing for invalidity first.
-        # Some invalid emails (like a blank one for superusers) may exist.
-        return invalid_email_error or email_exists_error
-
-    def confirm_email_handler(self, request):
-        email = request.data.get('email')
-        confirm_email = request.data.get('confirm_email')
-        return get_confirm_email_validation_error(confirm_email, email)
-
-    def password_handler(self, request):
-        username = request.data.get('username')
-        email = request.data.get('email')
-        password = request.data.get('password')
-        return get_password_validation_error(password, username, email)
-
-    def country_handler(self, request):
-        country = request.data.get('country')
-        return get_country_validation_error(country)
-
-    validation_handlers = {
-        "name": name_handler,
-        "username": username_handler,
-        "email": email_handler,
-        "confirm_email": confirm_email_handler,
-        "password": password_handler,
-        "country": country_handler
-    }
+    api_version = 'v1'
 
     @method_decorator(
         ratelimit(key=REAL_IP_KEY, rate=settings.REGISTRATION_VALIDATION_RATELIMIT, method='POST', block=True)
@@ -800,8 +821,72 @@ class RegistrationValidationView(APIView):
                     form_field_key: handler(self, request)
                 })
 
-        response_dict = {"validation_decisions": validation_decisions}
+        return Response({"validation_decisions": validation_decisions})
+
+
+class RegistrationValidationViewV2(RegistrationValidations, APIView):
+    """
+    Registration Validation view for Authn MFE
+    """
+
+    api_version = 'v2'
+
+    @method_decorator(
+        ratelimit(key=REAL_IP_KEY, rate=settings.REGISTRATION_VALIDATION_RATELIMIT, method='POST', block=True)
+    )
+    def post(self, request):
+        """
+        POST /api/user/v2/validation/registration/
+
+        Expects request of the form
+        ```
+        {
+            "form_field_key": <name_of_field>,
+            "name": "Dan the Validator",
+            "username": "mslm",
+            "email": "mslm@gmail.com",
+            "password": "password123",
+            "country": "PK"
+        }
+        ```
+        where each key except "form_field_key", is the appropriate form field name and the value is
+        user input.
+        `form_field_key` is used to determine which field should be validated, if value is empty
+        then all fields must be validated.
+
+        All fields should be sent in payload because some inputs can get extra verification
+        checks if entered along with others, like when the password may not equal the username.
+
+
+        Returns:
+            - Only fields which result in some validation errors are
+            returned
+            - Also returns username suggestion in case the username is
+            already taken
+        """
+        field_key = request.data.get('form_field_key')
+        validation_decisions = {}
+
+        def update_validations(field_name):
+            """
+            Updates the validation decision dictionary if the field
+            has an error message (validation).
+            """
+            validation = self.validation_handlers[field_name](self, request)
+            if validation:
+                validation_decisions[field_name] = validation
+
+        if field_key and field_key in self.validation_handlers:
+            update_validations(field_key)
+        else:
+            for form_field_key in self.validation_handlers:
+                # For every field requiring validation from the client,
+                # request a decision for it from the appropriate handler.
+                if form_field_key in request.data:
+                    update_validations(form_field_key)
+
+        response_dict = {'validationDecisions': validation_decisions}
         if self.username_suggestions:
-            response_dict['username_suggestions'] = self.username_suggestions
+            response_dict['usernameSuggestions'] = self.username_suggestions
 
         return Response(response_dict)

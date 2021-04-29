@@ -22,6 +22,9 @@ from edx_toggles.toggles.testutils import override_waffle_flag
 from openedx.core.djangoapps.site_configuration.helpers import get_value
 from openedx.core.djangoapps.site_configuration.tests.test_util import with_site_configuration
 from openedx.core.djangoapps.user_api.accounts import (
+    AUTHN_EMAIL_CONFLICT_MSG,
+    AUTHN_EMAIL_INVALID_MSG,
+    AUTHN_USERNAME_CONFLICT_MSG,
     EMAIL_BAD_LENGTH_MSG,
     EMAIL_CONFLICT_MSG,
     EMAIL_INVALID_MSG,
@@ -354,6 +357,44 @@ class RegistrationViewValidationErrorTest(ThirdPartyAuthTestMixin, UserAPITestCa
                     ).format(
                         self.EMAIL
                     )
+                }],
+                "error_code": "duplicate-email-username"
+            }
+        )
+
+    def test_duplicate_email_username_error_with_is_authn_check(self):
+        # Register the first user
+        response = self.client.post(self.url, {
+            "email": self.EMAIL,
+            "name": self.NAME,
+            "username": self.USERNAME,
+            "password": self.PASSWORD,
+            "honor_code": "true",
+        })
+        self.assertHttpOK(response)
+
+        # Try to create a second user with the same username and email
+        response = self.client.post(self.url, {
+            "is_authn": True,
+            "email": self.EMAIL,
+            "name": "Someone Else",
+            "username": self.USERNAME,
+            "password": self.PASSWORD,
+            "honor_code": "true",
+        })
+
+        response_json = json.loads(response.content.decode('utf-8'))
+        assert response.status_code == 409
+        username_suggestions = response_json.pop('username_suggestions')
+        assert len(username_suggestions) == 3
+        self.assertDictEqual(
+            response_json,
+            {
+                "username": [{
+                    "user_message": AUTHN_USERNAME_CONFLICT_MSG,
+                }],
+                "email": [{
+                    "user_message": AUTHN_EMAIL_CONFLICT_MSG
                 }],
                 "error_code": "duplicate-email-username"
             }
@@ -2173,7 +2214,7 @@ class TestGoogleRegistrationView(
 
 
 @ddt.ddt
-class RegistrationValidationViewTests(test_utils.ApiTestCase):
+class RegistrationValidationViewTests:
     """
     Tests for validity of user data in registration forms.
     """
@@ -2185,24 +2226,15 @@ class RegistrationValidationViewTests(test_utils.ApiTestCase):
         super().setUp()
         cache.clear()
 
-    def get_validation_response(self, data):
-        return self.client.post(self.path, data)
-
-    def get_validation_decision(self, response):
+    def get_validation_decision(self, data):
+        response = self.client.post(self.path, data)
         return response.data.get('validation_decisions', {})
 
-    def get_username_suggestions(self, response):
-        return response.data.get('username_suggestions', [])
-
-    def assertValidationDecision(self, data, decision, validate_suggestions=False):
-        response = self.get_validation_response(data)
-        assert self.get_validation_decision(response) == decision
-        if validate_suggestions:
-            assert len(self.get_username_suggestions(response)) == 3
+    def assertValidationDecision(self, data, decision):
+        assert self.get_validation_decision(data) == decision
 
     def assertNotValidationDecision(self, data, decision):
-        response = self.get_validation_response(data)
-        assert self.get_validation_decision(response) != decision
+        assert self.get_validation_decision(data) != decision
 
     def test_no_decision_for_empty_request(self):
         self.assertValidationDecision(
@@ -2214,23 +2246,6 @@ class RegistrationValidationViewTests(test_utils.ApiTestCase):
         self.assertValidationDecision(
             {'invalid_field': 'random_user_data'},
             {}
-        )
-
-    @ddt.data(
-        ['name', [name for name in testutils.VALID_NAMES]],  # lint-amnesty, pylint: disable=unnecessary-comprehension
-        ['email', [email for email in testutils.VALID_EMAILS]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
-        ['password', [password for password in testutils.VALID_PASSWORDS]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
-        ['username', [username for username in testutils.VALID_USERNAMES]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
-        ['country', [country for country in testutils.VALID_COUNTRIES]]  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
-    )
-    @ddt.unpack
-    def test_positive_validation_decision(self, form_field_name, user_data):
-        """
-        Test if {0} as any item in {1} gives a positive validation decision.
-        """
-        self.assertValidationDecision(
-            {form_field_name: user_data},
-            {form_field_name: ''}
         )
 
     @ddt.data(
@@ -2251,37 +2266,6 @@ class RegistrationValidationViewTests(test_utils.ApiTestCase):
             {form_field_name: ''}
         )
 
-    @ddt.data(
-        ['username', 'username@email.com', False],  # No conflict
-        ['user', 'username@email.com', True],  # Username conflict
-        ['username', 'user@email.com', False],  # Email conflict
-        ['user', 'user@email.com', True]  # Both conflict
-    )
-    @ddt.unpack
-    def test_existence_conflict(self, username, email, validate_suggestions):
-        """
-        Test if username '{0}' and email '{1}' have conflicts with
-        username 'user' and email 'user@email.com'.
-        """
-        user = User.objects.create_user(username='user', email='user@email.com')
-        self.assertValidationDecision(
-            {
-                'username': username,
-                'email': email
-            },
-            {
-                # pylint: disable=no-member
-                "username": USERNAME_CONFLICT_MSG.format(
-                    username=user.username
-                ) if username == user.username else '',
-                # pylint: disable=no-member
-                "email": EMAIL_CONFLICT_MSG.format(
-                    email_address=user.email
-                ) if email == user.email else ''
-            },
-            validate_suggestions
-        )
-
     @ddt.data('', ('e' * EMAIL_MAX_LENGTH) + '@email.com')
     def test_email_bad_length_validation_decision(self, email):
         self.assertValidationDecision(
@@ -2295,20 +2279,6 @@ class RegistrationValidationViewTests(test_utils.ApiTestCase):
             {'email': email},
             # pylint: disable=no-member
             {'email': EMAIL_INVALID_MSG.format(email=email)}
-        )
-
-    def test_confirm_email_matches_email(self):
-        email = 'user@email.com'
-        self.assertValidationDecision(
-            {'email': email, 'confirm_email': email},
-            {'email': '', 'confirm_email': ''}
-        )
-
-    @ddt.data('', 'users@other.email')
-    def test_confirm_email_doesnt_equal_email(self, confirm_email):
-        self.assertValidationDecision(
-            {'email': 'user@email.com', 'confirm_email': confirm_email},
-            {'email': '', 'confirm_email': str(REQUIRED_FIELD_CONFIRM_EMAIL_MSG)}
         )
 
     @ddt.data(
@@ -2393,3 +2363,179 @@ class RegistrationValidationViewTests(test_utils.ApiTestCase):
             assert response.status_code != 403
         response = self.request_without_auth('post', self.path)
         assert response.status_code == 403
+
+
+@ddt.ddt
+class RegistrationValidationViewV1Tests(RegistrationValidationViewTests, test_utils.ApiTestCase):
+    """
+    Registration validation v1 tests
+    """
+    @ddt.data(
+        ['name', [name for name in testutils.VALID_NAMES]],  # lint-amnesty, pylint: disable=unnecessary-comprehension
+        ['email', [email for email in testutils.VALID_EMAILS]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
+        ['password', [password for password in testutils.VALID_PASSWORDS]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
+        ['username', [username for username in testutils.VALID_USERNAMES]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
+        ['country', [country for country in testutils.VALID_COUNTRIES]]  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
+    )
+    @ddt.unpack
+    def test_positive_validation_decision(self, form_field_name, user_data):
+        """
+        Test if {0} as any item in {1} gives a positive validation decision.
+        """
+        self.assertValidationDecision(
+            {form_field_name: user_data},
+            {form_field_name: ''}
+        )
+
+    @ddt.data(
+        ['username', 'username@email.com'],  # No conflict
+        ['user', 'username@email.com'],  # Username conflict
+        ['username', 'user@email.com'],  # Email conflict
+        ['user', 'user@email.com']  # Both conflict
+    )
+    @ddt.unpack
+    def test_existence_conflict(self, username, email):
+        """
+        Test if username '{0}' and email '{1}' have conflicts with
+        username 'user' and email 'user@email.com'.
+        """
+        user = User.objects.create_user(username='user', email='user@email.com')
+        self.assertValidationDecision(
+            {
+                'username': username,
+                'email': email
+            },
+            {
+                # pylint: disable=no-member
+                "username": USERNAME_CONFLICT_MSG.format(
+                    username=user.username
+                ) if username == user.username else '',
+                # pylint: disable=no-member
+                "email": EMAIL_CONFLICT_MSG.format(
+                    email_address=user.email
+                ) if email == user.email else ''
+            },
+        )
+
+    def test_confirm_email_matches_email(self):
+        email = 'user@email.com'
+        self.assertValidationDecision(
+            {'email': email, 'confirm_email': email},
+            {'email': '', 'confirm_email': ''}
+        )
+
+    @ddt.data('', 'users@other.email')
+    def test_confirm_email_doesnt_equal_email(self, confirm_email):
+        self.assertValidationDecision(
+            {'email': 'user@email.com', 'confirm_email': confirm_email},
+            {'email': '', 'confirm_email': str(REQUIRED_FIELD_CONFIRM_EMAIL_MSG)}
+        )
+
+
+@ddt.ddt
+class RegistrationValidationViewV2Tests(RegistrationValidationViewTests, test_utils.ApiTestCase):
+    """
+    Registration validation v2 tests
+    """
+
+    endpoint_name = 'registration_validation_v2'
+    path = reverse(endpoint_name)
+
+    def get_validation_response(self, data):
+        return self.client.post(self.path, data)
+
+    def get_validation_decision(self, response):
+        return response.data.get('validationDecisions', {})
+
+    def get_username_suggestions(self, response):
+        return response.data.get('usernameSuggestions', [])
+
+    def assertValidationDecision(self, data, decision, validate_suggestions=False):
+        response = self.get_validation_response(data)
+        assert self.get_validation_decision(response) == decision
+        if validate_suggestions:
+            assert len(self.get_username_suggestions(response)) == 3
+
+    def assertNotValidationDecision(self, data, decision):
+        response = self.get_validation_response(data)
+        assert self.get_validation_decision(response) != decision
+
+    @ddt.data(
+        ['name', [name for name in testutils.VALID_NAMES]],  # lint-amnesty, pylint: disable=unnecessary-comprehension
+        ['email', [email for email in testutils.VALID_EMAILS]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
+        ['password', [password for password in testutils.VALID_PASSWORDS]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
+        ['username', [username for username in testutils.VALID_USERNAMES]],  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
+        ['country', [country for country in testutils.VALID_COUNTRIES]]  # lint-amnesty, pylint: disable=unnecessary-comprehension, line-too-long
+    )
+    @ddt.unpack
+    def test_positive_validation_decision(self, form_field_name, user_data):
+        """
+        Test if {0} as any item in {1} gives a positive validation decision.
+        """
+        self.assertValidationDecision(
+            {form_field_name: user_data},
+            {}
+        )
+
+    @ddt.data(
+        [
+            'username', 'username@email.com', {}, False
+        ],  # No conflict
+        [
+            'user', 'username@email.com', {"username": AUTHN_USERNAME_CONFLICT_MSG}, True
+        ],  # Username conflict
+        [
+            'username', 'user@email.com', {"email": AUTHN_EMAIL_CONFLICT_MSG}, False
+        ],  # Email conflict
+        [
+            'user', 'user@email.com', {"username": AUTHN_USERNAME_CONFLICT_MSG, "email": AUTHN_EMAIL_CONFLICT_MSG}, True
+        ]  # Both conflict
+    )
+    @ddt.unpack
+    def test_existence_conflict(self, username, email, validation, validate_suggestions):
+        """
+        Test if username '{0}' and email '{1}' have conflicts with
+        username 'user' and email 'user@email.com'.
+        """
+        user = User.objects.create_user(username='user', email='user@email.com')
+        self.assertValidationDecision(
+            {
+                'username': username,
+                'email': email
+            },
+            validation,
+            validate_suggestions
+        )
+
+    def test_password_equals_username_validation_decision(self):
+        """
+        Test that if password is too similar to username, correct validation
+        is returned by the endpoint.
+        """
+        self.assertValidationDecision(
+            {"username": "somephrase", "password": "somephrase"},
+            {"password": "The password is too similar to the username."}
+        )
+
+    def test_email_generically_invalid_validation_decision(self):
+        """
+        Tests the invalid email format validation.
+        """
+        email = 'email'
+        self.assertValidationDecision(
+            {'email': email},
+            {'email': AUTHN_EMAIL_INVALID_MSG}
+        )
+
+    def test_single_field_validation(self):
+        """
+        Test that if `form_field_key` is provided in request then
+        only validation for that endpoint is returned.
+        """
+        user = User.objects.create_user(username='user', email='user@email.com')
+        # using username and email that have conflicts but sending form_field_key will return
+        # validation for only email
+        self.assertValidationDecision(
+            {'username': 'user', 'email': 'user@email.com', 'form_field_key': 'email'},
+            {'email': AUTHN_EMAIL_CONFLICT_MSG}
+        )

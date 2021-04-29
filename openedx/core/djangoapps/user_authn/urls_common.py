@@ -49,6 +49,11 @@ urlpatterns = [
         register.RegistrationValidationView.as_view(),
         name='registration_validation'
     ),
+    url(
+        r'^api/user/v2/validation/registration$',
+        register.RegistrationValidationViewV2.as_view(),
+        name='registration_validation_v2'
+    ),
 
     url(r'^login_ajax$', login.login_user, name="login_api"),
 
